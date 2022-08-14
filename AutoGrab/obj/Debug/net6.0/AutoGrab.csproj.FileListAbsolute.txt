@@ -1,6 +1,0 @@
-C:\Users\gmyx\source\repos\AutoGrab\obj\Debug\net6.0\AutoGrab.csproj.AssemblyReference.cache
-C:\Users\gmyx\source\repos\AutoGrab\obj\Debug\net6.0\PluginInfo.cs
-C:\Users\gmyx\source\repos\AutoGrab\obj\Debug\net6.0\AutoGrab.GeneratedMSBuildEditorConfig.editorconfig
-C:\Users\gmyx\source\repos\AutoGrab\obj\Debug\net6.0\AutoGrab.AssemblyInfoInputs.cache
-C:\Users\gmyx\source\repos\AutoGrab\obj\Debug\net6.0\AutoGrab.AssemblyInfo.cs
-C:\Users\gmyx\source\repos\AutoGrab\obj\Debug\net6.0\AutoGrab.csproj.CoreCompileInputs.cache
