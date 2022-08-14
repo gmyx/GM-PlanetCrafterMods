@@ -67,7 +67,7 @@ namespace AutoMineAndGrab_Plugin
 
             //global allowLists/disallowList
             allowList = Config.Bind<string>("Options", "AllowList", "", "Comma-separated list of item IDs to allow mining (overrides DisallowList).");
-            disallowList = Config.Bind<string>("Options", "DisallowList", "", "Comma-separated list of item IDs to disallow mining (if AllowList is empty)");
+            disallowList = Config.Bind<string>("Options", "DisallowList", "GoldenEffigie1,GoldenEffigie2,GoldenEffigie3", "Comma-separated list of item IDs to disallow mining (if AllowList is empty)");
 
             actionToggleMine = new InputAction(binding: checkToggleKeyMine.Value);
             actionToggleMine.Enable();
