@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.2.32519.379
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "LessFrequentAsteroids_Plugin", "LessFrequentAsteroids_Plugin.csproj", "{C36D9CBE-0B39-41A7-A3B5-6AEB45C2CADD}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AutoMineAndGrab_Plugin", "..\AutoGrab\AutoMineAndGrab_Plugin.csproj", "{A35894B5-F05C-4B1E-9760-304DE0D1D8CD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C36D9CBE-0B39-41A7-A3B5-6AEB45C2CADD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C36D9CBE-0B39-41A7-A3B5-6AEB45C2CADD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C36D9CBE-0B39-41A7-A3B5-6AEB45C2CADD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C36D9CBE-0B39-41A7-A3B5-6AEB45C2CADD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A35894B5-F05C-4B1E-9760-304DE0D1D8CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A35894B5-F05C-4B1E-9760-304DE0D1D8CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A35894B5-F05C-4B1E-9760-304DE0D1D8CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A35894B5-F05C-4B1E-9760-304DE0D1D8CD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1320ED92-0EED-4A6B-A8D9-950F3503AF6F}
+	EndGlobalSection
+EndGlobal
