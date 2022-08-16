@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
@@ -81,8 +82,23 @@ namespace AutoMineAndGrab_Plugin
 
             LoggerInt = Logger;
             harmony.PatchAll(typeof(AutoMineAndGrab_Plugin.Plugin));
-            //Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), null);
             Dbgl("Plugin awake");
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(MachineGrower), "Update")]
+        private static void MachineGrower_Update_Postfix(GameObject ___instantiatedGameObject, bool ___hasEnergy, WorldObject ___worldObjectGrower, Inventory ___inventory)
+        {
+            if (___hasEnergy && ___worldObjectGrower.GetGrowth() == 100f && ___instantiatedGameObject == null)
+            {
+                if (___inventory.GetSize() == 1)
+                {
+                    WorldObject inventoryObject = ___inventory.GetInsideWorldObjects()[0];
+                    ___inventory.RemoveItem(inventoryObject, false);
+                    ___inventory.AddItem(inventoryObject);
+                    Dbgl("Fixed instance of grower...");
+                }
+            }
         }
 
         private void CheckForNearbyType<T>(ConfigEntry<float> maxRange, string type) where T : SpaceCraft.Actionnable
@@ -119,7 +135,20 @@ namespace AutoMineAndGrab_Plugin
                         continue;
                 }
 
-                if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
+                //if T is grabable, call Grab(), else 'mine'
+                /*if (typeof(ActionGrabable).IsAssignableFrom(typeof(T)))
+                {
+                    ActionGrabable ag = m as ActionGrabable;
+                    ag.OnAction();
+                    //if (ag.gameObject == null)
+                    //{
+                        // display message
+                        informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
+                        worldObject.SetDontSaveMe(false);
+                        Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
+                    //}                       
+                    
+                } else*/ if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
                 {
                     Destroy(m.gameObject);
                     informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
@@ -131,6 +160,7 @@ namespace AutoMineAndGrab_Plugin
                 {
                     break;
                 }
+                
             }
             if (count > 0)
             {
@@ -188,10 +218,10 @@ namespace AutoMineAndGrab_Plugin
                 CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
                 return;
             }
-            if (intervalCheckMine.Value)
+            if (intervalCheckGrab.Value)
             {
                 elapsedGrab += Time.deltaTime;
-                if (elapsedGrab > checkIntervalMine.Value)
+                if (elapsedGrab > checkIntervalGrab.Value)
                 {
                     elapsedGrab = 0;
                     CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
