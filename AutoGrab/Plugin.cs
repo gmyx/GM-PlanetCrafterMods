@@ -89,6 +89,7 @@ namespace AutoMineAndGrab_Plugin
         [HarmonyPatch(typeof(MachineGrower), "Update")]
         private static void MachineGrower_Update_Postfix(GameObject ___instantiatedGameObject, bool ___hasEnergy, WorldObject ___worldObjectGrower, Inventory ___inventory)
         {
+            //force seed to be re-inserted
             if (___hasEnergy && ___worldObjectGrower.GetGrowth() == 100f && ___instantiatedGameObject == null)
             {
                 if (___inventory.GetSize() == 1)
@@ -137,9 +138,9 @@ namespace AutoMineAndGrab_Plugin
 
                 //if T is grabable, call Grab(), else 'mine'
                 /*if (typeof(ActionGrabable).IsAssignableFrom(typeof(T)))
-                {
-                    ActionGrabable ag = m as ActionGrabable;
-                    ag.OnAction();
+                {                    
+                    ActionGrabable ag = m as ActionGrabable;                    
+                    ag.Grab();
                     //if (ag.gameObject == null)
                     //{
                         // display message
@@ -148,7 +149,19 @@ namespace AutoMineAndGrab_Plugin
                         Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
                     //}                       
                     
-                } else*/ if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
+                } else */
+                if (worldObject.GetGroup().GetId() == "Algae1Seed")
+                {
+                    //destroy breaks Algae1Seed   
+                    ActionGrabable ag = m as ActionGrabable;
+                    ag.OnAction();
+                    Destroy(m.gameObject);
+                    informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
+                    worldObject.SetDontSaveMe(false);
+                    Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
+                    count++;
+                }
+                else if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
                 {
                     Destroy(m.gameObject);
                     informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
