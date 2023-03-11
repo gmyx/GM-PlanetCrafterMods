@@ -1,12 +1,17 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing.Printing;
 using System.Linq;
+using System.Numerics;
 using System.Reflection;
 using BepInEx;
+using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
-using MijuTools;
+//using MijuTools;
 using SpaceCraft;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -41,6 +46,11 @@ namespace AutoMineAndGrab_Plugin
 
         private readonly Harmony harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         private static ManualLogSource LoggerInt;
+
+        static MethodInfo updateGrowing;
+        static MethodInfo instantiateAtRandomPosition;
+
+        static bool loadCompleted;
 
         public static void Dbgl(string str = "", LogLevel logLevel = LogLevel.Debug)
         {
@@ -80,26 +90,125 @@ namespace AutoMineAndGrab_Plugin
             actionCheckGrab = new InputAction(binding: checkKeyGrab.Value);
             actionCheckGrab.Enable();
 
+            //connect to functions
+            updateGrowing = AccessTools.Method(typeof(MachineOutsideGrower), "UpdateGrowing", new Type[] { typeof(float) });
+            instantiateAtRandomPosition = AccessTools.Method(typeof(MachineOutsideGrower), "InstantiateAtRandomPosition", new Type[] { typeof(GameObject), typeof(bool) });
+
             LoggerInt = Logger;
             harmony.PatchAll(typeof(AutoMineAndGrab_Plugin.Plugin));
             Dbgl("Plugin awake");
         }
 
-        [HarmonyPostfix]
+        /*[HarmonyPostfix]
         [HarmonyPatch(typeof(MachineGrower), "Update")]
-        private static void MachineGrower_Update_Postfix(GameObject ___instantiatedGameObject, bool ___hasEnergy, WorldObject ___worldObjectGrower, Inventory ___inventory)
+        private static void MachineGrower(MachineGrower __instance, GameObject ___instantiatedGameObject, bool ___hasEnergy, WorldObject ___worldObjectGrower, Inventory ___inventory)
         {
             //force seed to be re-inserted
-            if (___hasEnergy && ___worldObjectGrower.GetGrowth() == 100f && ___instantiatedGameObject == null)
+            if (___hasEnergy && ___worldObjectGrower.GetGrowth() == 100f && ___instantiatedGameObject == null && loadCompleted == true)
             {
                 if (___inventory.GetSize() == 1)
                 {
-                    WorldObject inventoryObject = ___inventory.GetInsideWorldObjects()[0];
-                    ___inventory.RemoveItem(inventoryObject, false);
-                    ___inventory.AddItem(inventoryObject);
+                    //WorldObject inventoryObject = ___inventory.GetInsideWorldObjects()[0];
+                    //___inventory.RemoveItem(inventoryObject, false);
+                    ___worldObjectGrower.SetGrowth(30f);
+                    __instance.SetGrowerInventory(___inventory);
                     Dbgl("Fixed instance of grower...");
                 }
             }
+        }*/
+
+        private bool CheckMOGList(List<GameObject> ligo, UnityEngine.Vector3 pos, ConfigEntry<float> maxRange, PlayerMainController player, MachineOutsideGrower mog, InformationsDisplayer informationsDisplayer)
+        {
+            try
+            {
+                foreach (GameObject gameObject in ligo)
+                {
+                    var worldObjectAssociated = gameObject.GetComponent<WorldObjectAssociated>();
+                    if (worldObjectAssociated == null)
+                        continue;
+
+                    WorldObject worldObject = worldObjectAssociated.GetWorldObject();
+                    Dbgl($"worldObject: {worldObject.GetGroup().GetId()}; Growth: {worldObject.GetGameObject().transform.localScale.x}");
+
+                    if (worldObject.GetGroup().GetId() == "Algae1Seed" && worldObject.GetGameObject().transform.localScale.x > 0.5)
+                    {
+                        //secondary range check
+                        var dist2 = UnityEngine.Vector3.Distance(gameObject.transform.position, pos);
+                        if (dist2 > maxRange.Value) //item must be in range, not just grower
+                            continue;
+
+                        //pick it up, unles debug false
+                        if (intervalCheckGrab.Value)
+                        {
+                            if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
+                            {
+                                Dbgl($"{dist2}");                                
+                                // call on grabbed, so it regrows
+                                MethodInfo dynMethod = mog.GetType().GetMethod("OnGrabedAGrowing", BindingFlags.NonPublic | BindingFlags.Instance);
+                                dynMethod.Invoke(mog, new object[] { worldObject });
+                                Dbgl("onGrabbed");
+
+                                //call grab
+
+                                informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
+                                worldObject.SetDontSaveMe(false);
+                                //Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
+
+                                Destroy(gameObject); //list gets invalidated after this
+                                Dbgl("do grab!"); 
+                                
+                                return true;
+                            }
+                        }
+                    }
+                }
+
+                return false;
+            } catch
+            {
+                return false; //stop
+            }
+        }
+
+        private void CheckForNearbyMachineOutsideGrower(ConfigEntry<float> maxRange)
+        {
+            var player = Managers.GetManager<PlayersManager>().GetActivePlayerController();
+            UnityEngine.Vector3 pos = player.transform.position;
+            InformationsDisplayer informationsDisplayer = Managers.GetManager<DisplayersHandler>().GetInformationsDisplayer();
+            int count = 0;
+
+            //call a function on grower - can find by looking for growser a location                            
+            foreach (MachineOutsideGrower mog in FindObjectsOfType<MachineOutsideGrower>())
+            {                
+                var dist = UnityEngine.Vector3.Distance(mog.transform.position, pos);
+                if (dist > maxRange.Value * 5) //to add a config if this works
+                    continue;
+
+                bool cont = false;
+                int failSafe = 0;
+                do
+                {
+                    if (++failSafe >= 10)
+                        continue;
+
+                    //get it's list of instantiatedGameObjects
+                    FieldInfo instantiatedGameObjects = mog.GetType().GetField("instantiatedGameObjects", BindingFlags.NonPublic | BindingFlags.Instance);
+                    List<GameObject> ligo = (List<GameObject>)instantiatedGameObjects.GetValue(mog);
+                    Dbgl($"mog: {mog.GetInstanceID()}; {ligo.Count}; {dist}");
+
+                    cont = CheckMOGList(ligo, pos, maxRange, player, mog, informationsDisplayer);
+                    if (cont)
+                        count++;
+                } while (cont == true); //will only be true if item found
+            }
+            
+            //wrap up
+            if (count > 0)
+            {
+                player.GetPlayerAudio().PlayGrab();
+            }
+            Dbgl($"Grabbed {count} algae !");
+
         }
 
         private void CheckForNearbyType<T>(ConfigEntry<float> maxRange, string type) where T : SpaceCraft.Actionnable
@@ -112,9 +221,11 @@ namespace AutoMineAndGrab_Plugin
             var player = Managers.GetManager<PlayersManager>().GetActivePlayerController();
             InformationsDisplayer informationsDisplayer = Managers.GetManager<DisplayersHandler>().GetInformationsDisplayer();
             int count = 0;
+            UnityEngine.Vector3 pos = player.transform.position;
+
+            //get all object of type, either minable or grabbale (TBD if grababble still valid)
             foreach (var m in FindObjectsOfType<T>())
-            {
-                UnityEngine.Vector3 pos = player.transform.position;
+            {                
                 var dist = UnityEngine.Vector3.Distance(m.transform.position, pos);
                 if (dist > maxRange.Value)
                     continue;
@@ -137,32 +248,29 @@ namespace AutoMineAndGrab_Plugin
                 }
 
                 //if T is grabable, call Grab(), else 'mine'
-                /*if (typeof(ActionGrabable).IsAssignableFrom(typeof(T)))
-                {                    
-                    ActionGrabable ag = m as ActionGrabable;                    
-                    ag.Grab();
-                    //if (ag.gameObject == null)
-                    //{
-                        // display message
-                        informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
-                        worldObject.SetDontSaveMe(false);
-                        Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
-                    //}                       
-                    
-                } else */
-                if (worldObject.GetGroup().GetId() == "Algae1Seed")
+                Dbgl($"checking {worldObject.GetGroup().GetId()}");
+                if (typeof(ActionGrabable).IsAssignableFrom(typeof(T)))
                 {
-                    //destroy breaks Algae1Seed   
-                    ActionGrabable ag = m as ActionGrabable;
-                    ag.OnAction();
-                    Destroy(m.gameObject);
-                    informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
-                    worldObject.SetDontSaveMe(false);
-                    Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
-                    count++;
-                }
-                else if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
+                    //this works on vegetables, no algea
+                    if (worldObject.GetGroup().GetId() != "Algae1Seed")
+                    {
+                        Dbgl($"{worldObject.GetGroup().GetId()} is Grabbable");
+
+                        //see if in a container, if yes, replant, if no just pick it up
+                        Dbgl($"{m.GetInstanceID()}: {worldObject.GetGroup().GetId()}? {worldObject.GetGameObject().transform.localScale.x}");
+
+                        if (!player.GetPlayerBackpack().GetInventory().IsFull()) // && worldObject.GetGroup().GetId() != "Algae1Seed")
+                        {
+                            MethodInfo dynMethod = m.GetType().GetMethod("Grab", BindingFlags.NonPublic | BindingFlags.Instance);
+                            dynMethod.Invoke(m, new object[] { });
+                            //informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
+                            Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
+                            count++;
+                        }
+                    }
+                } else if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
                 {
+                    //minables / pickup-a-bles
                     Destroy(m.gameObject);
                     informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
                     worldObject.SetDontSaveMe(false);
@@ -228,16 +336,19 @@ namespace AutoMineAndGrab_Plugin
             {
                 Dbgl($"Pressed manual check key for grabable");
                 elapsedGrab = 0;
+                CheckForNearbyMachineOutsideGrower(maxRangeGrab);
                 CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
                 return;
             }
-            if (intervalCheckGrab.Value)
-            {
+            if (intervalCheckGrab.Value || isDebug.Value) 
+            { //will skip, unless debug. if debug, will log but not grab
                 elapsedGrab += Time.deltaTime;
                 if (elapsedGrab > checkIntervalGrab.Value)
                 {
                     elapsedGrab = 0;
-                    CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
+                    CheckForNearbyMachineOutsideGrower(maxRangeGrab);
+                    //if (intervalCheckGrab.Value)
+                        CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
                     return;
                 }
             }
@@ -252,6 +363,20 @@ namespace AutoMineAndGrab_Plugin
         private void OnDestroy()
         {
             harmony.UnpatchSelf();
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(SessionController), "Start")]
+        static void SessionController_Start()
+        {
+            loadCompleted = true;
+        }
+
+        [HarmonyPostfix]
+        [HarmonyPatch(typeof(UiWindowPause), nameof(UiWindowPause.OnQuit))]
+        static void UiWindowPause_OnQuit()
+        {
+            loadCompleted = false;
         }
     }
 }

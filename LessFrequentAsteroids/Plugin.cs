@@ -4,7 +4,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
-using MijuTools;
+//using MijuTools;
 using SpaceCraft;
 using UnityEngine.InputSystem;
 
@@ -16,7 +16,7 @@ namespace LessFrequentAsteroids_Plugin
     {
         private static ConfigEntry<float> configAstroidTimeMultiplier;
         private static ConfigEntry<bool> configAstroidIsDebug;
-        private static MeteoHandler meteoHandlerInstance;        
+        //private static MeteoHandler meteoHandlerInstance;        
 
         private readonly Harmony harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         private static ManualLogSource LoggerInt;
@@ -34,12 +34,12 @@ namespace LessFrequentAsteroids_Plugin
             LoggerInt = Logger;
         }
 
-        [HarmonyPostfix]
+        /*[HarmonyPostfix]
         [HarmonyPatch(typeof(MeteoHandler), "Start")]
         private static void MeteoHandler_Start_Postfix(MeteoHandler __instance)
         {
             meteoHandlerInstance = __instance;            
-        }
+        }*/
 
         [HarmonyPrefix]
         [HarmonyPatch(typeof(MeteoHandler), "TryToLaunchAnEvent")]

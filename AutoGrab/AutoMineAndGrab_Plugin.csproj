@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net462</TargetFramework>
     <Product>AutoMineAndGrab</Product>
-    <Version>1.0.2</Version>
+    <Version>1.1.0</Version>
     <AssemblyName>GM-$(Product)</AssemblyName>
     <Description>Automaticly mine and grab resources. Extention of AutoMiner</Description>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -18,6 +18,7 @@
     <PackageReference Include="BepInEx.BaseLib" Version="5.*" />
     <PackageReference Include="BepInEx.Core" Version="5.*" />
     <PackageReference Include="BepInEx.PluginInfoProps" Version="1.*" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="UnityEngine.Modules" Version="2022.1.13" IncludeAssets="compile" />
   </ItemGroup>
 
@@ -31,13 +32,10 @@
     <Reference Include="UnityInputSystem">
       <HintPath>$(GameLibrariesFolder)Unity.InputSystem.dll</HintPath>
     </Reference>
-    <Reference Include="Miju-Tools">
-      <HintPath>$(GameLibrariesFolder)com.mijugames.miju-tools.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
 
   <Target Name="CopyDLLs" AfterTargets="Build">
