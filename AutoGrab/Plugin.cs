@@ -44,6 +44,10 @@ namespace AutoMineAndGrab_Plugin
         private InputAction actionToggleGrab;
         private InputAction actionCheckGrab;
 
+#if DEBUG
+        private InputAction actionGetMOGs;
+#endif
+
         private readonly Harmony harmony = new Harmony(PluginInfo.PLUGIN_GUID);
         private static ManualLogSource LoggerInt;
 
@@ -65,14 +69,14 @@ namespace AutoMineAndGrab_Plugin
             // minables settings
             intervalCheckMine = Config.Bind<bool>("Options", "IntervalCheckMine", true, "Enable interval checking for minables");
             checkIntervalMine = Config.Bind<float>("Options", "CheckIntervaMine", 3f, "Seconds betweeen check for minables");
-            maxRangeMine = Config.Bind<float>("Options", "MaxRangeMine", 10f, "Range to check in meters for minables");
+            maxRangeMine = Config.Bind<float>("Options", "MaxRangeMine", 20f, "Range to check in meters for minables");
             checkToggleKeyMine = Config.Bind<string>("Options", "IntervalCheckKeyMine", "<Keyboard>/v", "Key to enable / disable interval checking for minables");
             checkKeyMine = Config.Bind<string>("Options", "CheckKeyMine", "<Keyboard>/c", "Key to check manually for minables");
 
             // grababbles settings
             intervalCheckGrab = Config.Bind<bool>("Options", "IntervalCheckGrab", true, "Enable interval checking for grabables");
             checkIntervalGrab = Config.Bind<float>("Options", "CheckIntervalGrab", 3f, "Seconds betweeen check for grabables");
-            maxRangeGrab = Config.Bind<float>("Options", "MaxRangeGrab", 10f, "Range to check in meters for grabables");
+            maxRangeGrab = Config.Bind<float>("Options", "MaxRangeGrab", 20f, "Range to check in meters for grabables");
             checkToggleKeyGrab = Config.Bind<string>("Options", "IntervalCheckKeyGrab", "<Keyboard>/b", "Key to enable / disable interval checking for grabables");
             checkKeyGrab = Config.Bind<string>("Options", "CheckKeyGrab", "<Keyboard>/n", "Key to check manually for grabables");
 
@@ -90,13 +94,18 @@ namespace AutoMineAndGrab_Plugin
             actionCheckGrab = new InputAction(binding: checkKeyGrab.Value);
             actionCheckGrab.Enable();
 
+#if DEBUG
+            actionGetMOGs = new InputAction(binding: "<Keyboard>/z");
+            actionGetMOGs.Enable();
+#endif
+
             //connect to functions
             updateGrowing = AccessTools.Method(typeof(MachineOutsideGrower), "UpdateGrowing", new Type[] { typeof(float) });
             instantiateAtRandomPosition = AccessTools.Method(typeof(MachineOutsideGrower), "InstantiateAtRandomPosition", new Type[] { typeof(GameObject), typeof(bool) });
 
             LoggerInt = Logger;
             harmony.PatchAll(typeof(AutoMineAndGrab_Plugin.Plugin));
-            Dbgl("Plugin awake");
+            Dbgl($"Plugin awake; AutoMine: {intervalCheckMine.Value}; AutoGrab: {intervalCheckGrab.Value}");
         }
 
         /*[HarmonyPostfix]
@@ -117,7 +126,55 @@ namespace AutoMineAndGrab_Plugin
             }
         }*/
 
-        private bool CheckMOGList(List<GameObject> ligo, UnityEngine.Vector3 pos, ConfigEntry<float> maxRange, PlayerMainController player, MachineOutsideGrower mog, InformationsDisplayer informationsDisplayer)
+        [HarmonyPrefix]
+        [HarmonyPatch(typeof(ActionGrabable), "Grab")]
+        private static bool Grab(ActionGrabable __instance, bool ___canGrab, ref PlayerMainController ___playerSource, 
+            ItemWorldDislpayer ___itemWorldDisplayer, ref Grabed ___grabedEvent)
+        {
+            Dbgl("inside grab");
+            //re implement due to some fields being null sometimes
+            if (___canGrab)
+            {
+                try
+                {                    
+                    WorldObject worldObject = __instance.GetComponent<WorldObjectAssociated>().GetWorldObject();
+                    if (worldObject == null)
+                    {
+                        Dbgl("worldObject is null"); //don't know why, but makes it ungrabbable
+                        return false;
+                    }
+
+                    //validate params, can cause errors
+                    if (___playerSource == null)
+                    {
+                        ___playerSource = Managers.GetManager<PlayersManager>().GetActivePlayerController();
+                    }
+
+                    UnityEngine.Object.Destroy(__instance.gameObject);
+                    ___playerSource.GetPlayerBackpack().GetInventory().AddItem(worldObject);
+                    worldObject.SetDontSaveMe(_dontSaveMe: false);
+                    ___playerSource.GetPlayerAudio().PlayGrab();
+                    if (___itemWorldDisplayer == null) //can be null, but no harm
+                    { 
+                        ___itemWorldDisplayer.Hide();
+                    }
+                    if (___grabedEvent != null)
+                    {
+                        ___grabedEvent(worldObject);
+                    }
+                    ___grabedEvent = null;                    
+                } catch (Exception e)
+                {
+                    Dbgl(e.Message);
+                    Dbgl(e.StackTrace);
+                }
+            }
+            
+
+            return false; //do not run original
+        }
+
+        private bool CheckMOGList(List<GameObject> ligo, UnityEngine.Vector3 pos, ConfigEntry<float> maxRange, PlayerMainController player, MachineOutsideGrower mog, InformationsDisplayer informationsDisplayer, bool pickup)
         {
             try
             {
@@ -137,26 +194,30 @@ namespace AutoMineAndGrab_Plugin
                         if (dist2 > maxRange.Value) //item must be in range, not just grower
                             continue;
 
-                        //pick it up, unles debug false
-                        if (intervalCheckGrab.Value)
+                        //pick it up
+                        if (pickup)
                         {
                             if (player.GetPlayerBackpack().GetInventory().AddItem(worldObject))
                             {
-                                Dbgl($"{dist2}");                                
+                                Dbgl($"{dist2}");
+
                                 // call on grabbed, so it regrows
                                 MethodInfo dynMethod = mog.GetType().GetMethod("OnGrabedAGrowing", BindingFlags.NonPublic | BindingFlags.Instance);
                                 dynMethod.Invoke(mog, new object[] { worldObject });
-                                Dbgl("onGrabbed");
+                                Dbgl("onGrabbed");                                
 
-                                //call grab
+                                //display results
+                                informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());                                
+                                Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
 
-                                informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
-                                worldObject.SetDontSaveMe(false);
-                                //Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
+                                //destroy worldObject                                
+                                worldObject.SetDontSaveMe(false); //don't - already done in OnGrabedAGrowing
+                                worldObject = null;
+                                gameObject.SetActive(false); //hide it and stop events?
+                                //Destroy(gameObject); //if destory, cause doubling, without memoryleak?
 
-                                Destroy(gameObject); //list gets invalidated after this
-                                Dbgl("do grab!"); 
-                                
+                                Dbgl("do grab!");
+
                                 return true;
                             }
                         }
@@ -170,7 +231,7 @@ namespace AutoMineAndGrab_Plugin
             }
         }
 
-        private void CheckForNearbyMachineOutsideGrower(ConfigEntry<float> maxRange)
+        private void CheckForNearbyMachineOutsideGrower(ConfigEntry<float> maxRange, bool pickup = true)
         {
             var player = Managers.GetManager<PlayersManager>().GetActivePlayerController();
             UnityEngine.Vector3 pos = player.transform.position;
@@ -180,6 +241,7 @@ namespace AutoMineAndGrab_Plugin
             //call a function on grower - can find by looking for growser a location                            
             foreach (MachineOutsideGrower mog in FindObjectsOfType<MachineOutsideGrower>())
             {                
+                //since we need to check inside growers, do range * 5 to ensure we capture everything
                 var dist = UnityEngine.Vector3.Distance(mog.transform.position, pos);
                 if (dist > maxRange.Value * 5) //to add a config if this works
                     continue;
@@ -196,7 +258,7 @@ namespace AutoMineAndGrab_Plugin
                     List<GameObject> ligo = (List<GameObject>)instantiatedGameObjects.GetValue(mog);
                     Dbgl($"mog: {mog.GetInstanceID()}; {ligo.Count}; {dist}");
 
-                    cont = CheckMOGList(ligo, pos, maxRange, player, mog, informationsDisplayer);
+                    cont = CheckMOGList(ligo, pos, maxRange, player, mog, informationsDisplayer, pickup);
                     if (cont)
                         count++;
                 } while (cont == true); //will only be true if item found
@@ -254,17 +316,16 @@ namespace AutoMineAndGrab_Plugin
                     //this works on vegetables, no algea
                     if (worldObject.GetGroup().GetId() != "Algae1Seed")
                     {
-                        Dbgl($"{worldObject.GetGroup().GetId()} is Grabbable");
-
-                        //see if in a container, if yes, replant, if no just pick it up
+                        Dbgl($"{worldObject.GetGroup().GetId()} is Grabbable");                        
                         Dbgl($"{m.GetInstanceID()}: {worldObject.GetGroup().GetId()}? {worldObject.GetGameObject().transform.localScale.x}");
 
+                        //pick it up if backpack not full
                         if (!player.GetPlayerBackpack().GetInventory().IsFull()) // && worldObject.GetGroup().GetId() != "Algae1Seed")
-                        {
-                            MethodInfo dynMethod = m.GetType().GetMethod("Grab", BindingFlags.NonPublic | BindingFlags.Instance);
-                            dynMethod.Invoke(m, new object[] { });
+                        {                            
+                            MethodInfo dynMethod = typeof(ActionGrabable).GetMethod("Grab", BindingFlags.NonPublic | BindingFlags.Instance);                         
+                            dynMethod.Invoke(m, new object[] { });                            
                             //informationsDisplayer.AddInformation(2f, Readable.GetGroupName(worldObject.GetGroup()), DataConfig.UiInformationsType.InInventory, worldObject.GetGroup().GetImage());
-                            Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();
+                            //Managers.GetManager<DisplayersHandler>().GetItemWorldDislpayer().Hide();                            
                             count++;
                         }
                     }
@@ -340,24 +401,34 @@ namespace AutoMineAndGrab_Plugin
                 CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
                 return;
             }
-            if (intervalCheckGrab.Value || isDebug.Value) 
-            { //will skip, unless debug. if debug, will log but not grab
+            if (intervalCheckGrab.Value) 
+            { 
                 elapsedGrab += Time.deltaTime;
                 if (elapsedGrab > checkIntervalGrab.Value)
                 {
                     elapsedGrab = 0;
                     CheckForNearbyMachineOutsideGrower(maxRangeGrab);
-                    //if (intervalCheckGrab.Value)
-                        CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");
-                    return;
+                    CheckForNearbyType<ActionGrabable>(maxRangeGrab, "Grabed");                    
                 }
             }
+#if DEBUG
+            if (actionGetMOGs.WasPressedThisFrame())
+            {
+                Dbgl($"Pressed manual check key for non-pickup grabbale");
+                elapsedGrab = 0;
+                CheckForNearbyMachineOutsideGrower(maxRangeGrab, pickup: false);                
+                return;
+            }
+#endif
         }
 
         private void Update()
         {
-            UpdateMinable();
-            UpdateGrabable();
+            if (loadCompleted) //if run too fast, will cause grab errors
+            {
+                UpdateMinable();
+                UpdateGrabable();
+            }            
         }
 
         private void OnDestroy()
